@@ -19,7 +19,9 @@ public class RentalShop {
     // Shop cash
     private double cashEarned = 0.0;
     // File to persist shop state
-    private String shopStateFile;
+    private String shopStateBin;   // e.g. "SanJose.ser"
+    private String shopStateTxt;   // e.g. "SanJose.txt"
+    private static final String RENTED_REGISTRY = "rented_registry.txt";
     
     // Inner class to store rental record (vehicle + discount flag)
     private static class RentedRecord implements Serializable {
@@ -31,15 +33,39 @@ public class RentalShop {
             this.discountApplied = discountApplied;
         }
     }
+
+    private void syncWithGlobalRegistryOnStartup() {
+        Set<String> globalPlates = new HashSet<>();
+        File file = new File(RENTED_REGISTRY);
+        if (file.exists()) {
+            try (RandomAccessFile raf = new RandomAccessFile(file, "r");
+                FileChannel ch = raf.getChannel();
+                FileLock lock = ch.lock(0L, Long.MAX_VALUE, true)) {
+                String line;
+                while ((line = raf.readLine()) != null) {
+                    String[] parts = line.split(",");
+                    if (parts.length>=1) globalPlates.add(parts[0]);
+                }
+            } catch (IOException e) {
+                System.err.println("Error leyendo registro global: " + e.getMessage());
+            }
+        }
+        rentedVehicles.keySet().removeIf(plate -> !globalPlates.contains(plate));
+    }
     
     public RentalShop(String location, int spacesAvailable, List<String> lotNames) {
         this.location = location;
         this.spacesAvailable = spacesAvailable;
         this.lotNames = lotNames;
-        this.shopStateFile = location + ".txt";
+        this.shopStateBin = location + ".ser";
+        this.shopStateTxt = location + ".txt";
+        
         // Load shop state if it exists; otherwise, initialize.
-        if(new File(shopStateFile).exists()){
+        if (new File(shopStateTxt).exists()) {
+            System.out.println("Found existing text state " + shopStateTxt + ", loading binary snapshot.");
             loadState();
+            syncWithGlobalRegistryOnStartup();
+            writeHumanState();
         } else {
             initializeInventory();
         }
@@ -60,37 +86,66 @@ public class RentalShop {
     }
     
     public static void main(String[] args) {
-        Map<String,String> flags = parseArgs(args);
-        String location = flags.get("--location");
-        if(location == null || location.isEmpty()){
-            System.err.println("Error: --location must be provided.");
-            System.exit(1);
+        Map<String, String> flags = parseArgs(args);
+        String loc = flags.get("--location");
+        if (loc == null) {
+           System.err.println("Error: --location must be provided."); System.exit(1);
         }
-        // If shop state file exists, load state and ignore other flags.
-        String shopFile = location + ".txt";
-        RentalShop shop;
-        if(new File(shopFile).exists()){
-            shop = new RentalShop(location, 0, new ArrayList<>());
-            System.out.println("Loaded existing shop state from " + shopFile);
+    
+        // We only look at --spaces-available and --lots when there is NO shopStateTxt:
+        if (new File(loc + ".txt").exists()) {
+            RentalShop shop = new RentalShop(loc, 0, List.of());
+            shop.runCommandLoop();
         } else {
-            // Otherwise, use provided flags.
-            int spaces = 10;
-            if(flags.containsKey("--spaces-available")){
-                spaces = Integer.parseInt(flags.get("--spaces-available"));
-            }
-            List<String> lotNames = new ArrayList<>();
-            if(flags.containsKey("--lots")){
-                String[] lots = flags.get("--lots").split(",");
-                for(String lot: lots){
-                    lotNames.add(lot.trim());
-                }
-            } else {
-                System.err.println("Error: --lots flag must be provided.");
-                return;
-            }
-            shop = new RentalShop(location, spaces, lotNames);
+            int spaces = Integer.parseInt(flags.getOrDefault("--spaces-available", "10"));
+            List<String> lots = Arrays.asList(flags.getOrDefault("--lots","").split(","));
+            RentalShop shop = new RentalShop(loc, spaces, lots);
+            shop.runCommandLoop();
         }
-        shop.runCommandLoop();
+    }
+    
+    /** Agrega un vehículo rentado al registro compartido. */
+    private void addToGlobalRegistry(String plate, String type, boolean discount) {
+        File file = new File(RENTED_REGISTRY);
+        try (RandomAccessFile raf = new RandomAccessFile(file, "rw");
+            FileChannel ch = raf.getChannel();
+            FileLock lock = ch.lock()) {
+            raf.seek(raf.length());
+            raf.writeBytes(String.format("%s,%s,%b%n", plate, type, discount));
+        } catch (IOException e) {
+            System.err.println("Error writing to rented registry: " + e.getMessage());
+        }
+    }
+
+    /** Busca y elimina del registro global un vehículo rentado. 
+        @return un RentedRecord si lo encontró, o null si no está registrado */
+    private RentedRecord fetchFromGlobalRegistry(String plate) {
+        File file = new File(RENTED_REGISTRY);
+        if (!file.exists()) return null;
+        List<String> lines = new ArrayList<>();
+        RentedRecord found = null;
+        try (RandomAccessFile raf = new RandomAccessFile(file, "rw");
+            FileChannel ch = raf.getChannel();
+            FileLock lock = ch.lock()) {
+            raf.seek(0);
+            String line;
+            while ((line = raf.readLine()) != null) {
+                String[] parts = line.split(",");
+                if (parts[0].equals(plate) && found == null) {
+                    // línea que buscamos: lic, tipo, discount
+                    boolean discount = Boolean.parseBoolean(parts[2]);
+                    found = new RentedRecord(new Vehicle(plate, parts[1], 0), discount);
+                } else {
+                    lines.add(line); // lo guardamos para reescribir
+                }
+            }
+            // reescribimos sin la línea extraída
+            raf.setLength(0);
+            for (String l : lines) raf.writeBytes(l + System.lineSeparator());
+        } catch (IOException e) {
+            System.err.println("Error reading rented registry: " + e.getMessage());
+        }
+        return found;
     }
     
     // Interactive command loop.
@@ -172,14 +227,18 @@ public class RentalShop {
         }
         // Record the rented vehicle.
         rentedVehicles.put(vehicle.getLicensePlate(), new RentedRecord(vehicle, discountApplied));
+        addToGlobalRegistry(vehicle.getLicensePlate(), vehicle.getType(), discountApplied);
     }
     
     // RETURN command: update kilometers, compute charge, and update shop cash.
     private void returnVehicle(String licensePlate, int kilometers){
-        RentedRecord record = rentedVehicles.get(licensePlate);
-        if(record == null){
-            System.out.println("RETURN: Vehicle " + licensePlate + " is not rented from this shop.");
-            return;
+        RentedRecord record = rentedVehicles.remove(licensePlate);
+        if (record == null) {
+            record = fetchFromGlobalRegistry(licensePlate);
+            if (record == null) {
+                System.out.println("RETURN: Vehicle " + licensePlate + " is not rented by any shop.");
+                return;
+            }
         }
         Vehicle vehicle = record.vehicle;
         vehicle.addKilometers(kilometers);
@@ -315,31 +374,83 @@ public class RentalShop {
     }
     
     // Save the shop state using serialization.
-    private void saveState(){
-        try (ObjectOutputStream oos = new ObjectOutputStream(new FileOutputStream(shopStateFile))) {
+    private void saveState() {
+        saveBinaryState();
+        writeHumanState();
+    }
+    
+    // 1) Binary snapshot for fast reload:
+    private void saveBinaryState() {
+        try (ObjectOutputStream oos = new ObjectOutputStream(new FileOutputStream(shopStateBin))) {
             oos.writeObject(shopInventory);
             oos.writeObject(rentedVehicles);
             oos.writeObject(transactions);
             oos.writeDouble(cashEarned);
             oos.writeInt(spacesAvailable);
             oos.writeObject(lotNames);
-        } catch(IOException e){
-            System.err.println("Error saving shop state: " + e.getMessage());
+        } catch (IOException e) {
+            System.err.println("Error saving binary state: " + e.getMessage());
+        }
+    }
+    
+    // 2) Human‐readable dump for city.txt:
+    private void writeHumanState() {
+        try (PrintWriter pw = new PrintWriter(new FileWriter(shopStateTxt))) {
+            // Encabezado
+            pw.println("LOCATION: " + location);
+            pw.println("SPACES_AVAILABLE: " + spacesAvailable);
+            int empty = spacesAvailable - (shopInventory.size() + rentedVehicles.size());
+            pw.println("EMPTY_SLOTS: " + empty);
+            pw.println("CASH_EARNED: $" + String.format("%.2f", cashEarned));
+            pw.println();
+    
+            // Inventario
+            pw.println("INVENTORY:");
+            for (Vehicle v : shopInventory.values()) {
+                pw.printf("  %s,%s,%d%n",
+                    v.getLicensePlate(),
+                    v.getType(),
+                    v.getKilometers());
+            }
+            pw.println();
+    
+            // Rentados
+            pw.println("RENTED_OUT:");
+            for (RentedRecord r : rentedVehicles.values()) {
+                pw.printf("  %s,%s,%d,discount=%s%n",
+                    r.vehicle.getLicensePlate(),
+                    r.vehicle.getType(),
+                    r.vehicle.getKilometers(),
+                    r.discountApplied ? "10%" : "0%");
+            }
+            pw.println();
+    
+            // Transacciones
+            pw.println("TRANSACTIONS:");
+            for (Transaction t : transactions) {
+                pw.printf("  %s,%d,discount=%s,$%.2f%n",
+                    t.getLicensePlate(),           // String -> %s
+                    t.getKilometers(),             // int    -> %d
+                    t.isDiscountApplied() ? "10%" : "0%", // String -> %s
+                    t.getCharge());                // double -> %.2f
+            }
+        } catch (IOException e) {
+            System.err.println("Error writing human state: " + e.getMessage());
         }
     }
     
     // Load the shop state from file.
     @SuppressWarnings("unchecked")
-    private void loadState(){
-        try (ObjectInputStream ois = new ObjectInputStream(new FileInputStream(shopStateFile))) {
-            shopInventory = (Map<String, Vehicle>) ois.readObject();
-            rentedVehicles = (Map<String, RentedRecord>) ois.readObject();
-            transactions = (List<Transaction>) ois.readObject();
-            cashEarned = ois.readDouble();
+    private void loadState() {
+        try (ObjectInputStream ois = new ObjectInputStream(new FileInputStream(shopStateBin))) {
+            shopInventory   = (Map<String, Vehicle>)     ois.readObject();
+            rentedVehicles  = (Map<String, RentedRecord>)ois.readObject();
+            transactions    = (List<Transaction>)        ois.readObject();
+            cashEarned      = ois.readDouble();
             spacesAvailable = ois.readInt();
-            lotNames = (List<String>) ois.readObject();
-        } catch(IOException | ClassNotFoundException e){
-            System.err.println("Error loading shop state: " + e.getMessage());
+            lotNames        = (List<String>)             ois.readObject();
+        } catch (Exception e) {
+            System.err.println("Error loading binary state: " + e.getMessage());
         }
     }
     

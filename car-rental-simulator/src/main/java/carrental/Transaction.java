@@ -16,6 +16,16 @@ public class Transaction implements Serializable {
         this.charge = charge;
     }
 
+    // Getter for licensePlate
+    public String getLicensePlate() {
+        return licensePlate;
+    }
+
+    // Getter for kilometers
+    public int getKilometers() {
+        return kilometers;
+    }
+
     public boolean isDiscountApplied() {
         return discountApplied;
     }

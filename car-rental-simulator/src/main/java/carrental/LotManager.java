@@ -38,9 +38,13 @@ public class LotManager {
         // Process remove flag
         if(flags.containsKey("--remove-vehicle")){
             String plateToRemove = flags.get("--remove-vehicle");
-            boolean removed = lotVehicles.removeIf(v -> v.getLicensePlate().equals(plateToRemove));
+            boolean removed = lotVehicles.removeIf(v -> v.getLicensePlate().equalsIgnoreCase(plateToRemove));
             if(!removed){
-                System.out.println("Vehicle with license " + plateToRemove + " not found in lot " + lotName);
+                System.out.println("Vehicle with license " + plateToRemove 
+                        + " not found in lot " + lotName 
+                        + " (possibly assigned to a shop or is in use).");
+            } else {
+                System.out.println("Vehicle with license " + plateToRemove + " successfully removed from lot " + lotName + ".");
             }
         }
         
