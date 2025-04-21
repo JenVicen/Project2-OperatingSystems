@@ -1,5 +1,5 @@
 carrental/RentalShop.class
-carrental/LotManager.class
 carrental/RentalShop$RentedRecord.class
 carrental/Transaction.class
 carrental/Vehicle.class
+carrental/LotManager.class

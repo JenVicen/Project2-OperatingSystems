@@ -4,6 +4,8 @@ import java.io.*;
 import java.nio.channels.FileChannel;
 import java.nio.channels.FileLock;
 import java.util.*;
+import java.io.ByteArrayOutputStream;
+import java.io.PrintStream;
 
 public class RentalShop {
     // Shop state fields
@@ -22,6 +24,23 @@ public class RentalShop {
     private String shopStateBin;   // e.g. "SanJose.ser"
     private String shopStateTxt;   // e.g. "SanJose.txt"
     private static final String RENTED_REGISTRY = "rented_registry.txt";
+
+    public String executeCommand(String command) {
+        // Capture System.out
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        PrintStream  ps   = new PrintStream(baos);
+        PrintStream  old  = System.out;
+        System.setOut(ps);
+
+        // Process the command
+        processCommand(command);
+        saveState();
+
+        // Restores System.out and returns the captured output
+        System.out.flush();
+        System.setOut(old);
+        return baos.toString();
+    }
     
     // Inner class to store rental record (vehicle + discount flag)
     private static class RentedRecord implements Serializable {
@@ -455,7 +474,7 @@ public class RentalShop {
     }
     
     // Parse command line arguments.
-    private static Map<String,String> parseArgs(String[] args){
+    public static Map<String,String> parseArgs(String[] args){
         Map<String, String> flags = new HashMap<>();
         for(String arg: args){
             if(arg.startsWith("--")){
