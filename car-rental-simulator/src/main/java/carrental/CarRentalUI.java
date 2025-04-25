@@ -1,7 +1,7 @@
 /* 
 By Jennifer Vicentes
 
-AI Prompt: "Help me creating a base for a RentalShop UI in Java. It should be basic like a good starting point.
+AI Prompt: "Help me creating a base for a RentalShop and LotManager UI in Java. It should be basic like a good starting point.
 Also explain me every library and method you are using, so I can understand what is going on.
 I want to be able to represent the LotManager and the RentalShop classes."
 
