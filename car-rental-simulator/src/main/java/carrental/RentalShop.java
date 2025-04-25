@@ -1,11 +1,22 @@
+/*
+By Jennifer Vicentes
+Purpose: This class represents a rental shop in the car rental system. It contains information about the shop's location, available parking spaces, associated lots, and vehicles in inventory.
+It provides methods to rent and return vehicles, list the shop's state, and manage transactions. The class also handles file operations for saving and loading the shop's state.
+It uses serialization to save the shop's state to a binary file and a human-readable text file. The class also manages vehicle requests and returns to associated lots using file locking for concurrency safety.
+It includes methods to read and write lot files with file locking to ensure that multiple processes do not interfere with each other when accessing the same file.
+This class is important for managing the rental shop's operations, including vehicle rentals, returns, and transactions.
+It also provides a command-line interface for users to interact with the rental shop, allowing them to rent and return vehicles, list the shop's state, and view transactions.
+This class is also responsible for maintaining the shop's state and ensuring that the data is consistent and up-to-date.
+
+Acclaimed AI-generated method: syncWithGlobalRegistryOnStartup()
+All the other comments I wrote were put for me to keep track while developing, they are not AI generated.
+*/
 package carrental;
 
 import java.io.*;
 import java.nio.channels.FileChannel;
 import java.nio.channels.FileLock;
 import java.util.*;
-import java.io.ByteArrayOutputStream;
-import java.io.PrintStream;
 
 public class RentalShop {
     // Shop state fields
@@ -26,9 +37,11 @@ public class RentalShop {
     private static final String RENTED_REGISTRY = "rented_registry.txt";
 
     public String executeCommand(String command) {
-        // Capture System.out
+        // Capture System.out output, redirecting to a ByteArrayOutputStream, this is useful for testing purposes, as we can check the output of the commands
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        // Redirect System.out to the ByteArrayOutputStream, this allows us to capture the output of the commands and return it as a string
         PrintStream  ps   = new PrintStream(baos);
+        // Save the old System.out to restore it later
         PrintStream  old  = System.out;
         System.setOut(ps);
 
@@ -36,15 +49,20 @@ public class RentalShop {
         processCommand(command);
         saveState();
 
-        // Restores System.out and returns the captured output
+        // Restores System.out and returns the captured output, what flush does is to ensure that all the data in the stream is written out
+        // This is important to ensure that all the data is written out before we return it
         System.out.flush();
+        // Restore the old System.out
         System.setOut(old);
+        // Convert the ByteArrayOutputStream to a string and return it
         return baos.toString();
     }
     
     // Inner class to store rental record (vehicle + discount flag)
     private static class RentedRecord implements Serializable {
+        // Serial version UID for serialization, this means that the class can be serialized and deserialized
         private static final long serialVersionUID = 1L;
+        // Vehicle object and a flag indicating if the vehicle came from a lot (thus discount applies)
         Vehicle vehicle;
         boolean discountApplied; // true if vehicle came from a lot (thus discount applies)
         public RentedRecord(Vehicle vehicle, boolean discountApplied){
@@ -53,39 +71,58 @@ public class RentalShop {
         }
     }
 
-    private void syncWithGlobalRegistryOnStartup() {
-        Set<String> globalPlates = new HashSet<>();
-        File file = new File(RENTED_REGISTRY);
-        if (file.exists()) {
-            try (RandomAccessFile raf = new RandomAccessFile(file, "r");
-                FileChannel ch = raf.getChannel();
-                FileLock lock = ch.lock(0L, Long.MAX_VALUE, true)) {
-                String line;
-                while ((line = raf.readLine()) != null) {
-                    String[] parts = line.split(",");
-                    if (parts.length>=1) globalPlates.add(parts[0]);
+    // Synchronize the rented vehicles with the global registry on startup
+    /* 
+    AI Prompt: "How can I ensure that different processes do not interfere, maybe by using File locking please explain it and give me an example/hint."
+    Detailed Explanation: This AI-generated prompt gave me this implementation of syncWithGlobalRegistryOnStartup which ensures 
+    that multiple processes accessing the same file (RENTED_REGISTRY) do not interfere with each other. 
+    File locking is used to prevent concurrent modifications or reads while one process is working with the file. 
+    The FileChannel's lock() method acquires a shared lock (read-only) or an exclusive lock (write) on the file. 
+    In this case, a shared lock is used (`lock(0L, Long.MAX_VALUE, true)`) to safely read the file without allowing other processes to write to it simultaneously. 
+    The method reads the global registry file to synchronize the shop's rented vehicles with the global state, ensuring consistency. 
+    Any rented vehicles in the shop that are not present in the global registry are removed to avoid discrepancies.
+    */
+    private void syncWithGlobalRegistryOnStartup() { // AI generated
+        Set<String> globalPlates = new HashSet<>(); // AI generated
+        File file = new File(RENTED_REGISTRY); // AI generated
+        if (file.exists()) { // AI generated
+            try (RandomAccessFile raf = new RandomAccessFile(file, "r"); // AI generated
+                FileChannel ch = raf.getChannel(); // AI generated
+                FileLock lock = ch.lock(0L, Long.MAX_VALUE, true)) { // AI generated
+                String line; // AI generated
+                while ((line = raf.readLine()) != null) { // AI generated
+                    String[] parts = line.split(","); // AI generated
+                    if (parts.length>=1) globalPlates.add(parts[0]); // AI generated
                 }
-            } catch (IOException e) {
-                System.err.println("Error reading global registry: " + e.getMessage());
+            } catch (IOException e) { // AI generated
+                System.err.println("Error reading global registry: " + e.getMessage()); // AI generated
             }
         }
-        rentedVehicles.keySet().removeIf(plate -> !globalPlates.contains(plate));
+        rentedVehicles.keySet().removeIf(plate -> !globalPlates.contains(plate)); // AI generated
     }
     
+    // The constructor initializes the rental shop with a location, available spaces, and associated lots.
     public RentalShop(String location, int spacesAvailable, List<String> lotNames) {
+        // Validate input
         this.location = location;
         this.spacesAvailable = spacesAvailable;
         this.lotNames = lotNames;
+        // Set file names for binary and text state
+        // The .ser file is used for binary serialization, while the .txt file is a human-readable format
         this.shopStateBin = location + ".ser";
         this.shopStateTxt = location + ".txt";
         
         // Load shop state if it exists; otherwise, initialize.
         if (new File(shopStateTxt).exists()) {
+            // Load the text state to initialize the shop
             System.out.println("Found existing text state " + shopStateTxt + ", loading binary snapshot.");
+            // Initialize the shop with the loaded state
             loadState();
+            // Synchronize the rented vehicles with the global registry
             syncWithGlobalRegistryOnStartup();
             writeHumanState();
         } else {
+            // Initialize the shop with the provided location, spaces, and lots
             initializeInventory();
         }
     }
@@ -94,9 +131,13 @@ public class RentalShop {
     private void initializeInventory(){
         if(shopInventory.isEmpty()){
             for(String type: new String[]{"SEDAN", "SUV", "VAN"}){
+                // Request a vehicle from the lots
                 Vehicle v = requestVehicleFromLots(type);
+                // If a vehicle is found, add it to the shop inventory
                 if(v != null){
+                    // Add the vehicle to the shop inventory
                     shopInventory.put(v.getLicensePlate(), v);
+                    // Add the vehicle to the global registry
                     System.out.println("Initialized shop with vehicle " + v.getLicensePlate() + " (" + v.getType() + ")");
                     break;
                 }
@@ -113,9 +154,11 @@ public class RentalShop {
     
         // We only look at --spaces-available and --lots when there is NO shopStateTxt:
         if (new File(loc + ".txt").exists()) {
+            // If the shop state file exists, we load the state and run the command loop
             RentalShop shop = new RentalShop(loc, 0, List.of());
             shop.runCommandLoop();
         } else {
+            // If the shop state file does not exist, we create a new shop with the provided location, spaces, and lots
             int spaces = Integer.parseInt(flags.getOrDefault("--spaces-available", "10"));
             List<String> lots = Arrays.asList(flags.getOrDefault("--lots","").split(","));
             RentalShop shop = new RentalShop(loc, spaces, lots);
@@ -125,11 +168,16 @@ public class RentalShop {
     
     // Add a rented vehicle to the global registry.
     private void addToGlobalRegistry(String plate, String type, boolean discount) {
+        // Append the vehicle to the rented registry file with a lock
         File file = new File(RENTED_REGISTRY);
+        // Access the file with a lock to ensure no other process is writing to it at the same time
         try (RandomAccessFile raf = new RandomAccessFile(file, "rw");
+            // Acquire a lock on the file to prevent concurrent writes
             FileChannel ch = raf.getChannel();
             FileLock lock = ch.lock()) {
+            // Move to the end of the file to append the new vehicle
             raf.seek(raf.length());
+            // Write the vehicle information to the file
             raf.writeBytes(String.format("%s,%s,%b%n", plate, type, discount));
         } catch (IOException e) {
             System.err.println("Error writing to rented registry: " + e.getMessage());
@@ -140,17 +188,22 @@ public class RentalShop {
     @return a RentedRecord if it was found or null if it is not registeredx */
     private RentedRecord fetchFromGlobalRegistry(String plate) {
         File file = new File(RENTED_REGISTRY);
+        // Check if the file exists before trying to read it
         if (!file.exists()) return null;
         List<String> lines = new ArrayList<>();
         RentedRecord found = null;
         try (RandomAccessFile raf = new RandomAccessFile(file, "rw");
             FileChannel ch = raf.getChannel();
             FileLock lock = ch.lock()) {
+            // Move to the beginning of the file to read all lines
             raf.seek(0);
             String line;
+            // Read each line and check if the vehicle is found
             while ((line = raf.readLine()) != null) {
                 String[] parts = line.split(",");
+                // Check if the line has enough parts to avoid ArrayIndexOutOfBoundsException
                 if (parts[0].equals(plate) && found == null) {
+                    // If the vehicle is found, create a RentedRecord and set it to found
                     boolean discount = Boolean.parseBoolean(parts[2]);
                     found = new RentedRecord(new Vehicle(plate, parts[1], 0), discount);
                 } else {
@@ -184,6 +237,7 @@ public class RentalShop {
     
     // Process one command.
     private void processCommand(String input){
+        // Split the input into tokens
         String[] tokens = input.split("\\s+");
         if(tokens.length == 0) return;
         String command = tokens[0].toUpperCase();
@@ -230,6 +284,8 @@ public class RentalShop {
         }
         boolean discountApplied = false;
         if(vehicle != null){
+            // Vehicle found in shop inventory.
+            // Remove it from the inventory.
             shopInventory.remove(vehicle.getLicensePlate());
             System.out.println("RENT: Provided vehicle " + vehicle.getLicensePlate() + " (" + vehicle.getType() + ") from shop inventory.");
         } else {
@@ -245,13 +301,16 @@ public class RentalShop {
         }
         // Record the rented vehicle.
         rentedVehicles.put(vehicle.getLicensePlate(), new RentedRecord(vehicle, discountApplied));
+        // Add the rented vehicle to the global registry.
         addToGlobalRegistry(vehicle.getLicensePlate(), vehicle.getType(), discountApplied);
     }
     
     // RETURN command: update kilometers, compute charge, and update shop cash.
     private void returnVehicle(String licensePlate, int kilometers){
+        // Check if the vehicle is rented from this shop.
         RentedRecord record = rentedVehicles.remove(licensePlate);
         if (record == null) {
+            // If not found, check the global registry.
             record = fetchFromGlobalRegistry(licensePlate);
             if (record == null) {
                 System.out.println("RETURN: Vehicle " + licensePlate + " is not rented by any shop.");
@@ -262,6 +321,7 @@ public class RentalShop {
         vehicle.addKilometers(kilometers);
         // Compute charge: $1 per km, discount applies if vehicle came from a lot.
         double charge = kilometers;
+        // If a discount was applied, reduce the charge by 10%.
         if(record.discountApplied){
             double discount = 0.10 * charge;
             charge -= discount;
@@ -393,6 +453,7 @@ public class RentalShop {
     
     // Save the shop state using serialization.
     private void saveState() {
+        // Save the shop state to a binary file and a human-readable text file.
         saveBinaryState();
         writeHumanState();
     }
@@ -400,6 +461,7 @@ public class RentalShop {
     // 1) Binary snapshot for fast reload:
     private void saveBinaryState() {
         try (ObjectOutputStream oos = new ObjectOutputStream(new FileOutputStream(shopStateBin))) {
+            // Serialize the shop state
             oos.writeObject(shopInventory);
             oos.writeObject(rentedVehicles);
             oos.writeObject(transactions);
@@ -458,6 +520,10 @@ public class RentalShop {
     }
     
     // Load the shop state from file.
+    // This method is used to load the shop state from a binary file.
+    // It reads the serialized objects from the file and assigns them to the corresponding fields in the RentalShop class.
+    // The method uses ObjectInputStream to read the objects from the file and cast them to the appropriate types.
+    // The method also handles exceptions that may occur during the loading process, such as FileNotFoundException or ClassNotFoundException.
     @SuppressWarnings("unchecked")
     private void loadState() {
         try (ObjectInputStream ois = new ObjectInputStream(new FileInputStream(shopStateBin))) {
