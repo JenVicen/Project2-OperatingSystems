@@ -23,7 +23,7 @@ import java.io.*;
 import java.util.*;
 import java.util.List;
 
-public class RentalShopUI extends JFrame {
+public class CarRentalUI extends JFrame {
     // --- Lot Manager fields ---
     private JTextField lotNameField; // AI Generated
     private JSpinner   sedanSpinner, suvSpinner, vanSpinner; // AI Generated
@@ -43,7 +43,7 @@ public class RentalShopUI extends JFrame {
 
     private RentalShop shop;
 
-    public RentalShopUI() {
+    public CarRentalUI() {
         super("Car Rental Simulator");
         setLayout(new BorderLayout()); // AI Generated
 
@@ -292,6 +292,6 @@ public class RentalShopUI extends JFrame {
     }
 
     public static void main(String[] args) {
-        SwingUtilities.invokeLater(RentalShopUI::new); // AI Generated
+        SwingUtilities.invokeLater(CarRentalUI::new); // AI Generated
     }
 }
