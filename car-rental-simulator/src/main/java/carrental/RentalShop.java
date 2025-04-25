@@ -66,7 +66,7 @@ public class RentalShop {
                     if (parts.length>=1) globalPlates.add(parts[0]);
                 }
             } catch (IOException e) {
-                System.err.println("Error leyendo registro global: " + e.getMessage());
+                System.err.println("Error reading global registry: " + e.getMessage());
             }
         }
         rentedVehicles.keySet().removeIf(plate -> !globalPlates.contains(plate));
@@ -123,7 +123,7 @@ public class RentalShop {
         }
     }
     
-    /** Agrega un vehículo rentado al registro compartido. */
+    // Add a rented vehicle to the global registry.
     private void addToGlobalRegistry(String plate, String type, boolean discount) {
         File file = new File(RENTED_REGISTRY);
         try (RandomAccessFile raf = new RandomAccessFile(file, "rw");
@@ -136,8 +136,8 @@ public class RentalShop {
         }
     }
 
-    /** Busca y elimina del registro global un vehículo rentado. 
-        @return un RentedRecord si lo encontró, o null si no está registrado */
+    /** Search and remove a rented vehicle from the global registry.
+    @return a RentedRecord if it was found or null if it is not registeredx */
     private RentedRecord fetchFromGlobalRegistry(String plate) {
         File file = new File(RENTED_REGISTRY);
         if (!file.exists()) return null;
@@ -151,14 +151,13 @@ public class RentalShop {
             while ((line = raf.readLine()) != null) {
                 String[] parts = line.split(",");
                 if (parts[0].equals(plate) && found == null) {
-                    // línea que buscamos: lic, tipo, discount
                     boolean discount = Boolean.parseBoolean(parts[2]);
                     found = new RentedRecord(new Vehicle(plate, parts[1], 0), discount);
                 } else {
-                    lines.add(line); // lo guardamos para reescribir
+                    lines.add(line);
                 }
             }
-            // reescribimos sin la línea extraída
+            // rewrite the file without the found vehicle
             raf.setLength(0);
             for (String l : lines) raf.writeBytes(l + System.lineSeparator());
         } catch (IOException e) {
