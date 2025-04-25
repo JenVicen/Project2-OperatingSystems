@@ -414,7 +414,7 @@ public class RentalShop {
     // 2) Human‐readable dump for city.txt:
     private void writeHumanState() {
         try (PrintWriter pw = new PrintWriter(new FileWriter(shopStateTxt))) {
-            // Encabezado
+            // Headers
             pw.println("LOCATION: " + location);
             pw.println("SPACES_AVAILABLE: " + spacesAvailable);
             int empty = spacesAvailable - (shopInventory.size() + rentedVehicles.size());
@@ -422,7 +422,7 @@ public class RentalShop {
             pw.println("CASH_EARNED: $" + String.format("%.2f", cashEarned));
             pw.println();
     
-            // Inventario
+            // Inventory
             pw.println("INVENTORY:");
             for (Vehicle v : shopInventory.values()) {
                 pw.printf("  %s,%s,%d%n",
@@ -432,7 +432,7 @@ public class RentalShop {
             }
             pw.println();
     
-            // Rentados
+            // Rented vehicles
             pw.println("RENTED_OUT:");
             for (RentedRecord r : rentedVehicles.values()) {
                 pw.printf("  %s,%s,%d,discount=%s%n",
@@ -443,14 +443,14 @@ public class RentalShop {
             }
             pw.println();
     
-            // Transacciones
+            // Transactions
             pw.println("TRANSACTIONS:");
             for (Transaction t : transactions) {
                 pw.printf("  %s,%d,discount=%s,$%.2f%n",
-                    t.getLicensePlate(),           // String -> %s
-                    t.getKilometers(),             // int    -> %d
-                    t.isDiscountApplied() ? "10%" : "0%", // String -> %s
-                    t.getCharge());                // double -> %.2f
+                    t.getLicensePlate(),
+                    t.getKilometers(),
+                    t.isDiscountApplied() ? "10%" : "0%",
+                    t.getCharge());
             }
         } catch (IOException e) {
             System.err.println("Error writing human state: " + e.getMessage());
