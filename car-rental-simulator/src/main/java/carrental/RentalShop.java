@@ -17,8 +17,6 @@ import java.io.*;
 import java.nio.channels.FileChannel;
 import java.nio.channels.FileLock;
 import java.util.*;
-import java.io.ByteArrayOutputStream;
-import java.io.PrintStream;
 
 public class RentalShop {
     // Shop state fields
@@ -276,6 +274,12 @@ public class RentalShop {
     
     // RENT command: check for available vehicle or request one from lots.
     private void rentVehicle(String vehicleType){
+        int currentEmptySlots = spacesAvailable - (shopInventory.size() + rentedVehicles.size());
+        while (currentEmptySlots == 0) { // Block if no empty slots
+            System.out.println("Cannot rent more vehicles because there are no empty slots!");
+            return;
+        }
+
         Vehicle vehicle = null;
         // Look in shop inventory.
         for(Vehicle v : shopInventory.values()){
